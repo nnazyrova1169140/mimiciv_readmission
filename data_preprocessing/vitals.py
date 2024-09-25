@@ -93,6 +93,6 @@ def process_vital_signs_in_chunks(file_path, chunk_size):
     return df_final
 
 # Step 5: Run the processing function and print the result
-df_vitals_final = process_vital_signs_in_chunks(r'C:\Users\w1169140\Documents\Dataset\mimic-iv-3.0\mimic-iv-3.0\icu\chartevents.csv', chunk_size)
+df_vitals_final = process_vital_signs_in_chunks('chartevents.csv', chunk_size)
 
 print(df_vitals_final.head())
