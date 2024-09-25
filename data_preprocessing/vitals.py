@@ -96,3 +96,5 @@ def process_vital_signs_in_chunks(file_path, chunk_size):
 df_vitals_final = process_vital_signs_in_chunks('chartevents.csv', chunk_size)
 
 print(df_vitals_final.head())
+df_vitals_final = df_vitals_final[['subject_id', 'hadm_id', 'stay_id', 'charttime', 'heart_rate', 'sbp', 'dbp',
+                'mbp', 'sbp_ni', 'dbp_ni', 'mbp_ni', 'resp_rate', 'temperature', 'glucose', 'spo2']]
