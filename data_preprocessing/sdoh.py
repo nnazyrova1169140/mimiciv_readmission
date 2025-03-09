@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Load the dataset
-df_diag = pd.read_csv('C:/Users/w1169140/Documents/Dataset/mimic-iv-3.0/mimic-iv-3.0/hosp/diagnoses_icd.csv')
+df_diag = pd.read_csv('hosp/diagnoses_icd.csv')
 df_diag = df_diag[df_diag['hadm_id'].isin(df_elderly['hadm_id'])]
 # Convert 'icd_code' to string for consistent processing
 df_diag['icd_code'] = df_diag['icd_code'].astype(str)
