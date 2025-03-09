@@ -27,6 +27,3 @@ mci_df = pd.DataFrame({
     'hadm_id': mci.index,
     'Medication Complexity Index': mci.values
 })
-
-df_elderly = df_elderly.merge(mci_df, how='left', on='hadm_id')
-df_elderly = df_elderly.merge(unique_drug_count, how='left', on='hadm_id')
