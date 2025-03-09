@@ -1,0 +1,130 @@
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.utils.class_weight import compute_class_weight
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_auc_score, classification_report
+
+import torch
+from torch.utils.data import Dataset, DataLoader
+import torch.nn as nn
+import torch.optim as optim
+
+import warnings
+warnings.filterwarnings('ignore')
+
+class EnhancedModel(nn.Module):
+    def __init__(self, chem_input_dim, context_input_dim, hidden_dim):
+        super(EnhancedModel, self).__init__()
+        
+        # LSTM layers for temporal data
+        self.lstm1 = nn.LSTM(input_size=chem_input_dim, hidden_size=64, batch_first=True, bidirectional=True)
+        self.lstm2 = nn.LSTM(input_size=128, hidden_size=32, batch_first=True, bidirectional=True)
+        
+        # Multi-Head Attention
+        self.attention = nn.MultiheadAttention(embed_dim=64, num_heads=4, batch_first=True)
+        self.layer_norm = nn.LayerNorm(64)
+        self.dropout = nn.Dropout(0.2)
+        
+        # Global Average Pooling
+        self.global_avg_pool = nn.AdaptiveAvgPool1d(1)
+        
+        # Dense layers for contextual data
+        self.context_dense = nn.Sequential(
+            nn.Linear(context_input_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU()
+        )
+        
+        # Final classification layers
+        self.classifier = nn.Sequential(
+            nn.Linear(64 + 32, 32),
+            nn.ReLU(),
+            nn.Linear(32, 16),
+            nn.ReLU(),
+            nn.Linear(16, 1)
+        )
+        
+    def forward(self, x_chem, x_context):
+        # LSTM layers
+        x_chem, _ = self.lstm1(x_chem)
+        x_chem, _ = self.lstm2(x_chem)
+        
+        # Multi-Head Attention
+        attn_output, _ = self.attention(x_chem, x_chem, x_chem)
+        attn_output = self.layer_norm(attn_output)
+        attn_output = self.dropout(attn_output)
+        
+        # Global Average Pooling
+        attn_output = attn_output.permute(0, 2, 1)  # (batch_size, features, seq_len)
+        pooled_output = self.global_avg_pool(attn_output).squeeze(-1)
+        
+        # Contextual data processing
+        context_output = self.context_dense(x_context)
+        
+        # Concatenate outputs
+        combined_input = torch.cat((pooled_output, context_output), dim=1)
+        
+        # Classification
+        logits = self.classifier(combined_input)
+        return logits.squeeze()
+
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+chem_input_dim = X_chem_train_tensor.shape[2]
+context_input_dim = X_context_train_tensor.shape[1]
+hidden_dim = 64
+
+model = EnhancedModel(chem_input_dim, context_input_dim, hidden_dim)
+model.to(device)
+
+class_weights_tensor = torch.tensor([class_weights_dict[0], class_weights_dict[1]], dtype=torch.float32).to(device)
+pos_weight = class_weights_tensor[1] / class_weights_tensor[0]
+criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
+optimizer = Adam(model.parameters(), lr=0.0001)
+num_epochs = 30
+
+for epoch in range(num_epochs):
+    model.train()
+    epoch_loss = 0.0
+    for x_chem_batch, x_context_batch, y_batch in train_dataloader:
+        x_chem_batch = x_chem_batch.to(device)
+        x_context_batch = x_context_batch.to(device)
+        y_batch = y_batch.to(device)
+        
+        optimizer.zero_grad()
+        logits = model(x_chem_batch, x_context_batch)
+        loss = criterion(logits, y_batch)
+        loss.backward()
+        optimizer.step()
+        
+        epoch_loss += loss.item() * x_chem_batch.size(0)
+    
+    average_loss = epoch_loss / len(train_dataloader.dataset)
+    print(f"Epoch {epoch+1}/{num_epochs}, Training Loss: {average_loss:.4f}")
+    
+    model.eval()
+    test_loss = 0.0
+    all_probs = []
+    all_labels = []
+    with torch.no_grad():
+        for x_chem_batch, x_context_batch, y_batch in test_dataloader:
+            x_chem_batch = x_chem_batch.to(device)
+            x_context_batch = x_context_batch.to(device)
+            y_batch = y_batch.to(device)
+            
+            logits = model(x_chem_batch, x_context_batch)
+            loss = criterion(logits, y_batch)
+            test_loss += loss.item() * x_chem_batch.size(0)
+            
+            probabilities = torch.sigmoid(logits)
+            all_probs.extend(probabilities.cpu().numpy())
+            all_labels.extend(y_batch.cpu().numpy())
+    
+    test_loss /= len(test_dataloader.dataset)
+    roc_auc = roc_auc_score(all_labels, all_probs)
+    print(f"Epoch {epoch+1}/{num_epochs}, Test Loss: {test_loss:.4f}, Test ROC AUC: {roc_auc:.4f}")
+
